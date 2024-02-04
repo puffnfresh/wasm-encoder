@@ -1,0 +1,43 @@
+cabal-version:  2.2
+name:           wasm-encoder
+version:        1.1.2
+synopsis:       A low-level WebAssembly encoder
+author:         Brian McKenna
+maintainer:     brian@brianmckenna.org
+license:        MIT
+license-file:   LICENSE
+build-type:     Simple
+category:       Language
+homepage:       https://github.com/puffnfresh/wasm-encoder
+bug-reports:    https://github.com/puffnfresh/wasm-encoder
+
+source-repository head
+  type: git
+  location: https://github.com/puffnfresh/wasm-encoder
+
+library
+  exposed-modules:
+      Language.Wasm.Encoder
+      Language.Wasm.Encoder.Instruction
+      Language.Wasm.Encoder.Section
+      Language.Wasm.Encoder.Types
+  hs-source-dirs: src
+  build-depends:
+      base >=4.6 && < 5
+    , bytestring
+    , cereal
+  default-language: Haskell2010
+
+test-suite wasm-encoder-tests
+  main-is: Main.hs
+  hs-source-dirs: test
+  type: exitcode-stdio-1.0
+  build-depends:
+      base
+    , wasm-encoder
+    , bytestring
+    , cereal
+    , filepath
+    , tasty
+    , tasty-golden
+  default-language: Haskell2010
