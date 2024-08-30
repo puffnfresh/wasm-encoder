@@ -1,46 +1,72 @@
 module Language.Wasm.Encoder.Types (
-  BlockType (..)
+  Align (..)
+, BlockType (..)
 , CompType (..)
-, Finality (..)
-, RecType (..)
-, Subtype (..)
+, DataCount (..)
 , Export (..)
 , ExportDesc (..)
 , FieldIndex (..)
 , FieldType (..)
+, Finality (..)
 , FuncIndex (..)
 , GlobalIndex (..)
 , HeapType (..)
 , LabelIndex (..)
 , LocalIndex (..)
+, Locals (..)
+, MemArg (..)
 , MemIndex (..)
 , Mutable (..)
 , Nullable (..)
+, Offset (..)
+, RecType (..)
 , RefType (..)
 , ResultType (..)
 , StorageType (..)
+, Subtype (..)
+, TableIndex (..)
+, Tag (..)
 , TypeIndex (..)
 , ValType (..)
-, Locals (..)
-, putRecType
-, putSubtype
+, Import (..)
+, ImportDesc (..)
+, Limits (..)
+, Min (..)
+, Max (..)
+
+, putAlign
 , putBlockType
 , putCompType
+, putDataCount
 , putExport
 , putExportDesc
 , putFieldIndex
 , putFieldType
 , putFuncIndex
+, putGlobalIndex
 , putHeapType
 , putLabelIndex
 , putLocalIndex
+, putLocals
+, putMemArg
+, putMemIndex
 , putMutable
+, putName
+, putOffset
+, putRecType
 , putRefType
 , putStorageType
+, putSubtype
+, putTableIndex
+, putTag
 , putTypeIndex
 , putValType
 , putVec
-, putLocals
+, putImport
+, putImportDesc
+, putLimits
+, putMin
+, putMax
 
 , anyref
 , finalNoRec
@@ -252,10 +278,6 @@ putCompType (FuncType rt1 rt2) = do
   putResultType rt1
   putResultType rt2
 
--- data RecType
---   = RecType
---   deriving (Eq, Ord, Show)
-
 putVec
   :: (a -> S.Put)
   -> [a]
@@ -324,6 +346,16 @@ putGlobalIndex
 putGlobalIndex (GlobalIndex n) =
   S.putWord8 (fromIntegral n)
 
+data TableIndex
+  = TableIndex Word32
+  deriving (Eq, Ord, Show)
+
+putTableIndex
+  :: TableIndex
+  -> S.Put
+putTableIndex (TableIndex n) =
+  S.putWord8 (fromIntegral n)
+
 data LabelIndex
   = LabelIndex Word32
   deriving (Eq, Ord, Show)
@@ -339,6 +371,7 @@ data ExportDesc
   | ExportTypeIndex TypeIndex
   | ExportMemIndex MemIndex
   | ExportGlobalIndex GlobalIndex
+  -- | ExportTagIndex TagIndex
   deriving (Eq, Ord, Show)
 
 putExportDesc
@@ -365,9 +398,35 @@ putExport
   :: Export
   -> S.Put
 putExport (Export n ed) = do
-  putULEB128 (fromIntegral (BS.length n))
-  S.putByteString n
+  putName n
   putExportDesc ed
+
+data ImportDesc
+  = ImportFunc TypeIndex
+  -- | ImportTable TableType
+  -- | ImportMem MemType
+  -- | ImportGlobal GlobalType
+  -- | ImportTag TagType
+  deriving (Eq, Ord, Show)
+
+putImportDesc
+  :: ImportDesc
+  -> S.Put
+putImportDesc (ImportFunc ti) = do
+  S.putWord8 0x00
+  putTypeIndex ti
+
+data Import
+  = Import BS.ByteString BS.ByteString ImportDesc
+  deriving (Eq, Ord, Show)
+
+putImport
+  :: Import
+  -> S.Put
+putImport (Import m e ed) = do
+  putName m
+  putName e
+  putImportDesc ed
 
 data Locals
   = Locals Word32 ValType
@@ -389,6 +448,99 @@ putBlockType
   -> S.Put
 putBlockType EmptyBlockType =
   S.putWord8 0x40
+
+newtype Align
+  = Align Word32
+  deriving (Eq, Ord, Show)
+
+putAlign
+  :: Align
+  -> S.Put
+putAlign (Align a) =
+  putULEB128 a
+
+newtype Offset
+  = Offset Word32
+  deriving (Eq, Ord, Show)
+
+putOffset
+  :: Offset
+  -> S.Put
+putOffset (Offset a) =
+  putULEB128 a
+
+data MemArg
+  = MemArg Align Offset
+  deriving (Eq, Ord, Show)
+
+putMemArg
+  :: MemArg
+  -> S.Put
+putMemArg (MemArg a o) = do
+  putAlign a
+  putOffset o
+
+newtype Tag
+  = Tag TypeIndex
+  deriving (Eq, Ord, Show)
+
+putTag
+  :: Tag
+  -> S.Put
+putTag (Tag ti) = do
+  S.putWord8 0x00
+  putTypeIndex ti
+
+putName
+  :: BS.ByteString
+  -> S.Put
+putName n = do
+  putULEB128 (fromIntegral (BS.length n))
+  S.putByteString n
+
+newtype DataCount
+  = DataCount Word32
+  deriving (Eq, Ord, Show)
+
+data Min
+  = Min Word32
+  deriving (Eq, Ord, Show)
+
+putMin
+  :: Min
+  -> S.Put
+putMin (Min w) =
+  putULEB128 w
+
+data Max
+  = Max Word32
+  deriving (Eq, Ord, Show)
+
+putMax
+  :: Max
+  -> S.Put
+putMax (Max w) =
+  putULEB128 w
+
+data Limits
+  = Limits Min (Maybe Max)
+  deriving (Eq, Ord, Show)
+
+putLimits
+  :: Limits
+  -> S.Put
+putLimits (Limits mi ma) = do
+  case ma of
+    Nothing -> S.putWord8 0x00
+    Just _ -> S.putWord8 0x01
+  putMin mi
+  traverse_ putMax ma
+
+putDataCount
+  :: DataCount
+  -> S.Put
+putDataCount (DataCount c) =
+  putULEB128 c
 
 putULEB128
   :: Word32
