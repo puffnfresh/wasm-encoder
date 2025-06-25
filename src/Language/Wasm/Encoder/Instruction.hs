@@ -18,6 +18,7 @@ data Instruction
   | End
   | Br LabelIndex
   | BrIf LabelIndex
+  | BrTable [LabelIndex] LabelIndex
   | Return
   | Call FuncIndex
   | CallIndirect TableIndex TypeIndex
@@ -253,6 +254,10 @@ putInstruction (Br li) = do
   putLabelIndex li
 putInstruction (BrIf li) = do
   S.putWord8 0x0D
+  putLabelIndex li
+putInstruction (BrTable lis li) = do
+  S.putWord8 0x0E
+  putVec putLabelIndex lis
   putLabelIndex li
 putInstruction Return =
   S.putWord8 0x0F
