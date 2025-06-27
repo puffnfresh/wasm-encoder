@@ -72,10 +72,13 @@ module Language.Wasm.Encoder.Types (
 , finalNoRec
 
 , putULEB128
+, putSLEB128
 ) where
 
+import Data.Bits ((.&.), (.|.), shiftR, testBit, Bits)
 import Data.Foldable (traverse_)
-import Data.Word (Word32)
+import Data.Int (Int32, Int64)
+import Data.Word (Word32, Word64)
 import qualified Data.ByteString as BS
 import qualified Data.Serialize as S
 
@@ -120,7 +123,7 @@ putHeapType Array =
 putHeapType Exn =
   S.putWord8 0x69
 putHeapType (Concrete w) =
-  S.putWord8 (fromIntegral w) -- LEB128 S33
+  putULEB128 w -- LEB128 U32 (type index)
 
 data Nullable
   = NotNullable
@@ -294,7 +297,7 @@ putTypeIndex
   :: TypeIndex
   -> S.Put
 putTypeIndex (TypeIndex n) =
-  S.putWord8 (fromIntegral n)
+  putULEB128 n
 
 newtype FieldIndex
   = FieldIndex Word32
@@ -304,7 +307,7 @@ putFieldIndex
   :: FieldIndex
   -> S.Put
 putFieldIndex (FieldIndex n) =
-  S.putWord8 (fromIntegral n)
+  putULEB128 n
 
 newtype FuncIndex
   = FuncIndex Word32
@@ -314,7 +317,7 @@ putFuncIndex
   :: FuncIndex
   -> S.Put
 putFuncIndex (FuncIndex n) =
-  S.putWord8 (fromIntegral n)
+  putULEB128 n
 
 data LocalIndex
   = LocalIndex Word32
@@ -324,7 +327,7 @@ putLocalIndex
   :: LocalIndex
   -> S.Put
 putLocalIndex (LocalIndex n) =
-  S.putWord8 (fromIntegral n)
+  putULEB128 n
 
 data MemIndex
   = MemIndex Word32
@@ -334,7 +337,7 @@ putMemIndex
   :: MemIndex
   -> S.Put
 putMemIndex (MemIndex n) =
-  S.putWord8 (fromIntegral n)
+  putULEB128 n
 
 data GlobalIndex
   = GlobalIndex Word32
@@ -344,7 +347,7 @@ putGlobalIndex
   :: GlobalIndex
   -> S.Put
 putGlobalIndex (GlobalIndex n) =
-  S.putWord8 (fromIntegral n)
+  putULEB128 n
 
 data TableIndex
   = TableIndex Word32
@@ -354,7 +357,7 @@ putTableIndex
   :: TableIndex
   -> S.Put
 putTableIndex (TableIndex n) =
-  S.putWord8 (fromIntegral n)
+  putULEB128 n
 
 data LabelIndex
   = LabelIndex Word32
@@ -364,7 +367,7 @@ putLabelIndex
   :: LabelIndex
   -> S.Put
 putLabelIndex (LabelIndex n) =
-  S.putWord8 (fromIntegral n)
+  putULEB128 n
 
 data ExportDesc
   = ExportFuncIndex FuncIndex
@@ -545,8 +548,39 @@ putDataCount (DataCount c) =
 putULEB128
   :: Word32
   -> S.Put
-putULEB128 =
-  S.putWord8 . fromIntegral
+putULEB128 n
+  | n < 128 = S.putWord8 (fromIntegral n)
+  | otherwise = do
+      S.putWord8 (fromIntegral (n .&. 0x7F) .|. 0x80)
+      putULEB128 (n `shiftR` 7)
+
+putSLEB128
+  :: (Integral a, Bits a)
+  => a
+  -> S.Put
+putSLEB128 value =
+  go value
+  where
+    go n =
+      let
+        byte =
+          fromIntegral (n .&. 0x7F)
+        n' =
+          n `shiftR` 7
+        signBit =
+          testBit byte 6
+
+        -- For signed LEB128, we're done when:
+        -- - For positive numbers: remaining bits are all 0 and sign bit is 0
+        -- - For negative numbers: remaining bits are all 1 and sign bit is 1
+        done =
+          (n' == 0 && not signBit) || (n' == -1 && signBit)
+      in
+        if done
+        then S.putWord8 byte
+        else do
+          S.putWord8 (byte .|. 0x80)
+          go n'
 
 anyref
   :: ValType

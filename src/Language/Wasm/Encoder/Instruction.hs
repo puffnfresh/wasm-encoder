@@ -383,10 +383,10 @@ putInstruction MemoryGrow = do
   S.putWord8 0x00
 putInstruction (I32Const n) = do
   S.putWord8 0x41
-  S.putWord8 (fromIntegral n)
+  putSLEB128 n
 putInstruction (I64Const n) = do
-  S.putWord8 0x41
-  S.putInt64le n
+  S.putWord8 0x42
+  putSLEB128 n
 putInstruction I32Eqz =
   S.putWord8 0x45
 putInstruction I32Eq =
