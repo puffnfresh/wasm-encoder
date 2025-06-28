@@ -1,5 +1,6 @@
 module Language.Wasm.Encoder.Section (
   ConstInstruction (..)
+, CustomSection (..)
 , Data (..)
 , DataMode (..)
 , Element (..)
@@ -8,13 +9,18 @@ module Language.Wasm.Encoder.Section (
 , Function (..)
 , Global (..)
 , GlobalType (..)
+, Module (..)
 , Section (..)
 , Table (..)
 , TableType (..)
 
+, emptyModule
 , fromConstInstruction
 , header
+, noCustoms
+, prependCustomSections
 , putCode
+, putCustomSection
 , putData
 , putDataMode
 , putElement
@@ -219,43 +225,12 @@ putCode
 putCode =
   S.putNested (putULEB128 . fromIntegral) . putFunction
 
-putSection
-  :: Section
+putCustomSection
+  :: CustomSection
   -> S.Put
-putSection s = do
-  S.putWord8 (encodeSectionId i)
-  S.putNested (putULEB128 . fromIntegral) p
-  where
-    (i, p) =
-      case s of
-        CustomSection n bs ->
-          (SectionIdCustom, putName n *> S.putByteString (BS.pack bs))
-        TypeSection cts ->
-          (SectionIdType, putVec putRecType cts)
-        ImportSection is ->
-          (SectionIdImport, putVec putImport is)
-        FunctionSection tis ->
-          (SectionIdFunction, putVec putTypeIndex tis)
-        TableSection ts ->
-          (SectionIdTable, putVec putTable ts)
-        MemorySection ls ->
-          (SectionIdMemory, putVec putLimits ls)
-        GlobalSection gs ->
-          (SectionIdGlobal, putVec putGlobal gs)
-        ExportSection es ->
-          (SectionIdExport, putVec putExport es)
-        StartSection fi ->
-          (SectionIdStart, putFuncIndex fi)
-        ElementSection es ->
-          (SectionIdElement, putVec putElement es)
-        CodeSection cs ->
-          (SectionIdCode, putVec putCode cs)
-        DataSection ds ->
-          (SectionIdData, putVec putData ds)
-        DataCountSection dc ->
-          (SectionIdDataCount, putDataCount dc)
-        TagSection ts ->
-          (SectionIdTag, putVec putTag ts)
+putCustomSection (CustomSection n bs) = do
+  S.putWord8 (encodeSectionId SectionIdCustom)
+  S.putNested (putULEB128 . fromIntegral) (putName n *> S.putByteString (BS.pack bs))
 
 data SectionId
   = SectionIdCustom
@@ -290,22 +265,76 @@ encodeSectionId SectionIdData = 11
 encodeSectionId SectionIdDataCount = 12
 encodeSectionId SectionIdTag = 13
 
-data Section
+data CustomSection
   = CustomSection BS.ByteString [Word8]
-  | TypeSection [RecType]
-  | ImportSection [Import]
-  | FunctionSection [TypeIndex]
-  | TableSection [Table]
-  | MemorySection [Limits]
-  | GlobalSection [Global]
-  | ExportSection [Export]
-  | StartSection FuncIndex
-  | ElementSection [Element]
-  | CodeSection [Function]
-  | DataSection [Data]
-  | DataCountSection DataCount
-  | TagSection [Tag]
   deriving (Eq, Ord, Show)
+
+data Section a
+  = SectionMissing
+  | Section a [CustomSection]
+  deriving (Eq, Ord, Show)
+
+noCustoms
+  :: a
+  -> Section a
+noCustoms content =
+  Section content []
+
+putSection
+  :: SectionId
+  -> (a -> S.Put)
+  -> Section a
+  -> S.Put
+putSection _ _ SectionMissing =
+  pure ()
+putSection i f (Section content customSections) = do
+  S.putWord8 (encodeSectionId i)
+  S.putNested (putULEB128 . fromIntegral) (f content)
+  traverse_ putCustomSection customSections
+
+data Module = Module
+  { moduleCustomSectionsBefore :: [CustomSection]  -- Custom sections before any regular sections
+  , moduleTypeSection :: Section [RecType]
+  , moduleImportSection :: Section [Import]
+  , moduleFunctionSection :: Section [TypeIndex]
+  , moduleTableSection :: Section [Table]
+  , moduleMemorySection :: Section [Limits]
+  , moduleGlobalSection :: Section [Global]
+  , moduleExportSection :: Section [Export]
+  , moduleStartSection :: Section FuncIndex
+  , moduleElementSection :: Section [Element]
+  , moduleCodeSection :: Section [Function]
+  , moduleDataSection :: Section [Data]
+  , moduleDataCountSection :: Section DataCount
+  , moduleTagSection :: Section [Tag]
+  } deriving (Eq, Ord, Show)
+
+emptyModule
+  :: Module
+emptyModule =
+  Module
+    { moduleCustomSectionsBefore = []
+    , moduleTypeSection = SectionMissing
+    , moduleImportSection = SectionMissing
+    , moduleFunctionSection = SectionMissing
+    , moduleTableSection = SectionMissing
+    , moduleMemorySection = SectionMissing
+    , moduleGlobalSection = SectionMissing
+    , moduleExportSection = SectionMissing
+    , moduleStartSection = SectionMissing
+    , moduleElementSection = SectionMissing
+    , moduleCodeSection = SectionMissing
+    , moduleDataSection = SectionMissing
+    , moduleDataCountSection = SectionMissing
+    , moduleTagSection = SectionMissing
+    }
+
+prependCustomSections
+  :: [CustomSection]
+  -> Module
+  -> Module
+prependCustomSections customSections m =
+  m { moduleCustomSectionsBefore = customSections <> moduleCustomSectionsBefore m }
 
 header
   :: [Word8]
@@ -317,8 +346,21 @@ header =
   ]
 
 putModule
-  :: [Section]
+  :: Module
   -> S.Put
-putModule sections = do
+putModule m = do
   S.putByteString (BS.pack header)
-  traverse_ putSection sections
+  traverse_ putCustomSection (moduleCustomSectionsBefore m)
+  putSection SectionIdType (putVec putRecType) (moduleTypeSection m)
+  putSection SectionIdImport (putVec putImport) (moduleImportSection m)
+  putSection SectionIdFunction (putVec putTypeIndex) (moduleFunctionSection m)
+  putSection SectionIdTable (putVec putTable) (moduleTableSection m)
+  putSection SectionIdMemory (putVec putLimits) (moduleMemorySection m)
+  putSection SectionIdGlobal (putVec putGlobal) (moduleGlobalSection m)
+  putSection SectionIdExport (putVec putExport) (moduleExportSection m)
+  putSection SectionIdStart putFuncIndex (moduleStartSection m)
+  putSection SectionIdElement (putVec putElement) (moduleElementSection m)
+  putSection SectionIdCode (putVec putCode) (moduleCodeSection m)
+  putSection SectionIdData (putVec putData) (moduleDataSection m)
+  putSection SectionIdDataCount putDataCount (moduleDataCountSection m)
+  putSection SectionIdTag (putVec putTag) (moduleTagSection m)

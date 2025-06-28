@@ -25,82 +25,82 @@ golden n e =
 
 testEncode
   :: String
-  -> [Section]
+  -> Module
   -> TestTree
 testEncode n m =
   golden n (LBS.fromStrict (S.runPut (putModule m)))
 
 example
- :: [Section]
+ :: Module
 example =
-  [
-    TypeSection [
-      finalNoRec (StructType [
-        FieldType MutConst (Val I32)
-      , FieldType MutConst (Val (Ref (RefType IsNullable list)))
-      ])
-    , finalNoRec (FuncType (ResultType [Ref (RefType NotNullable list)]) (ResultType [I32]))
-    , finalNoRec (FuncType (ResultType []) (ResultType [Ref (RefType NotNullable list)]))
-    , finalNoRec (FuncType (ResultType [Ref (RefType NotNullable list), I32]) (ResultType [I32]))
-    , finalNoRec (FuncType (ResultType [anyref]) (ResultType [anyref]))
-    , finalNoRec (FuncType (ResultType []) (ResultType [I32]))
-    ]
-  , FunctionSection [
-      TypeIndex 2
-    , TypeIndex 1
-    , TypeIndex 3
-    , TypeIndex 1
-    , TypeIndex 4
-    , TypeIndex 5
-    ]
-  , ExportSection [
-      Export (C.pack "main") (ExportFuncIndex (FuncIndex 5))
-    ]
-  , CodeSection [
-      Function [] [
-        I32Const 10
-      , I32Const 11
-      , RefNull None
-      , StructNew (TypeIndex 0)
-      , StructNew (TypeIndex 0)
+  emptyModule
+    { moduleTypeSection = noCustoms [
+        finalNoRec (StructType [
+          FieldType MutConst (Val I32)
+        , FieldType MutConst (Val (Ref (RefType IsNullable list)))
+        ])
+      , finalNoRec (FuncType (ResultType [Ref (RefType NotNullable list)]) (ResultType [I32]))
+      , finalNoRec (FuncType (ResultType []) (ResultType [Ref (RefType NotNullable list)]))
+      , finalNoRec (FuncType (ResultType [Ref (RefType NotNullable list), I32]) (ResultType [I32]))
+      , finalNoRec (FuncType (ResultType [anyref]) (ResultType [anyref]))
+      , finalNoRec (FuncType (ResultType []) (ResultType [I32]))
       ]
-    , Function [] [
-        LocalGet (LocalIndex 0)
-      , StructGet (TypeIndex 0) (FieldIndex 0)
+    , moduleFunctionSection = noCustoms [
+        TypeIndex 2
+      , TypeIndex 1
+      , TypeIndex 3
+      , TypeIndex 1
+      , TypeIndex 4
+      , TypeIndex 5
       ]
-    , Function [] [
-        LocalGet (LocalIndex 1)
-      , LocalGet (LocalIndex 0)
-      , StructGet (TypeIndex 0) (FieldIndex 0)
-      , I32Add
-      , LocalSet (LocalIndex 1)
+    , moduleExportSection = noCustoms [
+        Export (C.pack "main") (ExportFuncIndex (FuncIndex 5))
+      ]
+    , moduleCodeSection = noCustoms [
+        Function [] [
+          I32Const 10
+        , I32Const 11
+        , RefNull None
+        , StructNew (TypeIndex 0)
+        , StructNew (TypeIndex 0)
+        ]
+      , Function [] [
+          LocalGet (LocalIndex 0)
+        , StructGet (TypeIndex 0) (FieldIndex 0)
+        ]
+      , Function [] [
+          LocalGet (LocalIndex 1)
+        , LocalGet (LocalIndex 0)
+        , StructGet (TypeIndex 0) (FieldIndex 0)
+        , I32Add
+        , LocalSet (LocalIndex 1)
 
-      , Block EmptyBlockType
-      , LocalGet (LocalIndex 0)
-      , StructGet (TypeIndex 0) (FieldIndex 1)
-      , BrOnNull (LabelIndex 0)
-      , LocalGet (LocalIndex 1)
-      , ReturnCall (FuncIndex 2)
-      , End
+        , Block EmptyBlockType
+        , LocalGet (LocalIndex 0)
+        , StructGet (TypeIndex 0) (FieldIndex 1)
+        , BrOnNull (LabelIndex 0)
+        , LocalGet (LocalIndex 1)
+        , ReturnCall (FuncIndex 2)
+        , End
 
-      , LocalGet (LocalIndex 1)
+        , LocalGet (LocalIndex 1)
+        ]
+      , Function [] [
+          LocalGet (LocalIndex 0)
+        , I32Const 0
+        , ReturnCall (FuncIndex 2)
+        ]
+      , Function [] [
+          LocalGet (LocalIndex 0)
+        ]
+      , Function [] [
+          Call (FuncIndex 0)
+        , Call (FuncIndex 4)
+        , RefCast (RefType NotNullable (Concrete 0))
+        , Call (FuncIndex 3)
+        ]
       ]
-    , Function [] [
-        LocalGet (LocalIndex 0)
-      , I32Const 0
-      , ReturnCall (FuncIndex 2)
-      ]
-    , Function [] [
-        LocalGet (LocalIndex 0)
-      ]
-    , Function [] [
-        Call (FuncIndex 0)
-      , Call (FuncIndex 4)
-      , RefCast (RefType NotNullable (Concrete 0))
-      , Call (FuncIndex 3)
-      ]
-    ]
-  ]
+  }
   where
     list =
       Concrete 0
